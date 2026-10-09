@@ -1191,5 +1191,69 @@ sub("feed",[{kinds:[1,6,16,20,21,22],"#t":[TAG],limit:100}],addCard);
 try{const s=localStorage.getItem("nsec");if(s){const d=NT.nip19.decode(s);if(d.type=="nsec")setKey(d.data)}}catch{}
 ui();
 </script>
-</body>
+</body><!-- زر تثبيت تطبيق كلمات -->
+<style>
+#kalimat-install-btn {
+  display: none;
+  position: fixed;
+  bottom: 85px;
+  left: 16px;
+  z-index: 99999;
+  background: #1877f2;
+  color: white;
+  border: none;
+  border-radius: 25px;
+  padding: 12px 18px;
+  font-size: 15px;
+  font-weight: bold;
+  box-shadow: 0 4px 12px #0003;
+  cursor: pointer;
+}
+</style>
+
+<button id="kalimat-install-btn" type="button">
+  📲 تثبيت تطبيق كلمات
+</button>
+
+<script>
+(function () {
+  const btn = document.getElementById('kalimat-install-btn');
+  let installPrompt = null;
+
+  if (window.matchMedia('(display-mode: standalone)').matches ||
+      window.navigator.standalone === true) {
+    return;
+  }
+
+  window.addEventListener('beforeinstallprompt', function (event) {
+    event.preventDefault();
+    installPrompt = event;
+    btn.style.display = 'block';
+  });
+
+  btn.addEventListener('click', async function () {
+    if (installPrompt) {
+      installPrompt.prompt();
+      await installPrompt.userChoice;
+      installPrompt = null;
+      btn.style.display = 'none';
+    } else {
+      alert('لتثبيت كلمات، افتح قائمة المتصفح ⋮ ثم اختر «إضافة إلى الشاشة الرئيسية» أو «تثبيت التطبيق» إن ظهر الخيار.');
+    }
+  });
+
+  window.addEventListener('appinstalled', function () {
+    btn.style.display = 'none';
+  });
+
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', function () {
+      navigator.serviceWorker.register('/hasdan/sw.js')
+        .catch(function (error) {
+          console.error('تعذّر تسجيل Service Worker:', error);
+        });
+    });
+  }
+})();
+</script>
 </html>
