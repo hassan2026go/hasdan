@@ -13,7 +13,16 @@ html,body{height:100%;background:#000;color:#fff;font-family:Tajawal,system-ui,s
 #feed{height:100dvh;overflow-y:scroll;scroll-snap-type:y mandatory;scrollbar-width:none}
 #feed::-webkit-scrollbar{display:none}
 .card{height:100dvh;scroll-snap-align:start;scroll-snap-stop:always;position:relative;background:#000}
-.card video{width:100%;height:100%;object-fit:contain}
+.card video{width:100%;height:100%;object-fit:contain;background:radial-gradient(ellipse at center,#071b2c 0%,#000 78%)}
+.card img.mi{width:100%;height:100%;object-fit:contain;background:#020812}
+.card .side{gap:10px;bottom:calc(78px + env(safe-area-inset-bottom,0px));inset-inline-end:8px}
+.card .ib{font-size:23px;gap:1px;min-width:36px;min-height:38px;justify-content:center}
+.card .ib .ic{display:grid;place-items:center;width:30px;height:30px}
+.card .ib .ic svg{width:26px;height:26px;display:block}
+.card .ib small{font-size:10px;line-height:1.15;max-width:52px;text-align:center}
+.card .av{width:40px;height:40px}
+.card .vcontrols{gap:7px;inset-inline-start:8px}
+.card .vcontrols button{width:38px;height:38px;font-size:17px}
 .info{position:absolute;inset-inline:14px 84px;bottom:calc(76px + env(safe-area-inset-bottom,0px));text-shadow:0 1px 6px #000}
 .info b{font-size:17px;display:block;margin-bottom:4px}
 .info p{font-size:15px;line-height:1.5;max-height:4.5em;overflow:hidden}
@@ -397,7 +406,8 @@ function addCard(ev,rp){
   let m;
   if(T=="v"){
     m=el("video",{loop:true,playsInline:true,muted:true,preload:"metadata"});m.dataset.src=u;
-  }else if(T=="i")m=el("img",{src:u,loading:"lazy",alt:"",className:"mi"});
+    m.addEventListener("error",()=>{if(!m.dataset.mediaError){m.dataset.mediaError="1";toast("تعذّر تشغيل الفيديو. قد يكون الرابط غير مباشر أو الصيغة غير مدعومة.")}});
+  }else if(T=="i"){m=el("img",{src:u,loading:"lazy",alt:"",className:"mi"});m.addEventListener("error",()=>{m.alt="تعذّر تحميل الصورة؛ تحقق من رابط الملف";m.style.objectFit="contain";m.style.background="#071b2c";});}
   else m=el("div",{className:"tx",textContent:cap});
   const like=el("button",{className:"ib lk",ariaLabel:"إعجاب بالمنشور"},el("span",{className:"ic",textContent:"♡"}),el("small",{className:"lc",textContent:"0"}));
   let lp=0,lt;
@@ -672,21 +682,40 @@ function wantProfile(p){
 }
 
 /* ---------- publish ---------- */
+let selectedMediaBytes=null, selectedMediaFile=null, selectedMediaError="";
+async function snapshotSelectedFile(file){
+  selectedMediaBytes=null;selectedMediaFile=file;selectedMediaError="";
+  if(!file)return;
+  try{
+    // Read while the Android document-picker grant is fresh, not later on Publish.
+    const buffer=await new Promise((resolve,reject)=>{
+      const reader=new FileReader();
+      reader.onload=()=>resolve(reader.result);
+      reader.onerror=()=>reject(reader.error||new Error("تعذرت قراءة الملف من الهاتف"));
+      reader.onabort=()=>reject(new Error("أُلغيت قراءة الملف"));
+      reader.readAsArrayBuffer(file);
+    });
+    selectedMediaBytes=buffer;
+  }catch(e){selectedMediaError="تعذرت قراءة الملف من الهاتف. أعد اختياره من المعرض وانتظر اكتمال المعاينة ثم اضغط نشر.";}
+}
 async function upload(file){
   if(!file)throw new Error("لم يتم اختيار ملف");
+  if(selectedMediaFile!==file||!selectedMediaBytes)await snapshotSelectedFile(file);
+  if(!selectedMediaBytes)throw new Error(selectedMediaError||"تعذرت قراءة الملف؛ أعد اختياره من المعرض ثم انتظر المعاينة");
   const ext=(file.name.split(".").pop()||"").toLowerCase();
   const guessedType=file.type||({jpg:"image/jpeg",jpeg:"image/jpeg",png:"image/png",gif:"image/gif",webp:"image/webp",avif:"image/avif",bmp:"image/bmp",mp4:"video/mp4",m4v:"video/mp4",mov:"video/quicktime",webm:"video/webm",ogv:"video/ogg",m3u8:"application/x-mpegURL"}[ext]||"");
   if(!/^image\//.test(guessedType)&&!/^video\//.test(guessedType)&&guessedType!="application/x-mpegURL")throw new Error("تعذّر تحديد نوع الملف؛ اختر صورة أو فيديو بصيغة معروفة");
   if(file.size>200*1024*1024)throw new Error("حجم الملف أكبر من 200 ميغابايت");
   if(!crypto.subtle)throw new Error("المتصفح لا يدعم التحقق الآمن المطلوب لرفع الملفات؛ افتح المنصة في Chrome");
-  const h=hex(new Uint8Array(await crypto.subtle.digest("SHA-256",await file.arrayBuffer())));
+  const bytes=selectedMediaBytes;
+  const h=hex(new Uint8Array(await crypto.subtle.digest("SHA-256",bytes)));
   const auth=await sign({kind:24242,created_at:now(),content:"Upload file to Blossom",tags:[["t","upload"],["x",h],["expiration",String(now()+600)]]});
   const token=btoa(unescape(encodeURIComponent(JSON.stringify(auth))));
   let response;
   try{
-    response=await fetch(BLOSSOM+"/upload",{method:"PUT",headers:{Authorization:"Nostr "+token,"Content-Type":guessedType},body:file});
+    response=await fetch(BLOSSOM+"/upload",{method:"PUT",headers:{Authorization:"Nostr "+token,"Content-Type":guessedType},body:new Blob([bytes],{type:guessedType})});
   }catch(e){throw new Error("تعذّر الاتصال بخدمة رفع الوسائط. تحقق من الإنترنت أو جرّب لاحقاً.")}
-  if(!response.ok)throw new Error("رفض خادم رفع الوسائط الملف ("+response.status+"). جرّب رابطاً مباشراً أو تحقق من خدمة الرفع.");
+  if(!response.ok){let detail="";try{detail=(await response.text()).slice(0,180)}catch{};throw new Error("رفض خادم رفع الوسائط الملف ("+response.status+"). "+detail)}
   let data;try{data=await response.json()}catch{throw new Error("خادم الرفع لم يُرجع رابط الملف")}
   const url=data.url||data.sha256&&(`${BLOSSOM}/${data.sha256}`);
   if(!url||!/^https:\/\//i.test(url))throw new Error("خادم الرفع لم يُرجع رابط HTTPS صالحاً");
@@ -703,7 +732,15 @@ function previewFile(input,box){
   else {box.hidden=true;toast("صيغة الملف غير مدعومة. اختر صورة أو فيديو من المعرض.");input.value="";return}
   box.append(node,el("p",{textContent:f.name+" · "+(f.size/1024/1024).toFixed(1)+" MB"}));
 }
-$("#f").addEventListener("change",()=>previewFile($("#f"),$("#postPreview")));
+$("#f").addEventListener("change",async()=>{
+  const input=$("#f"),f=input.files&&input.files[0];
+  previewFile(input,$("#postPreview"));
+  selectedMediaBytes=null;selectedMediaFile=null;selectedMediaError="";
+  if(!f)return;
+  $("#st").textContent="جارٍ تجهيز الملف من الهاتف…";
+  await snapshotSelectedFile(f);
+  $("#st").textContent=selectedMediaBytes?"تم تجهيز الملف. يمكنك نشره الآن.":selectedMediaError;
+});
 $("#u").addEventListener("input",()=>{if($("#f").files.length){$("#f").value="";$("#postPreview").replaceChildren();$("#postPreview").hidden=true}});
 $("#go").onclick=async()=>{
   const st=$("#st");
@@ -711,12 +748,15 @@ $("#go").onclick=async()=>{
     let u=$("#u").value.trim();const f=$("#f").files&&$("#f").files[0],c=$("#c").value.trim();
     if(f){st.textContent="جارٍ رفع الملف إلى خدمة الوسائط…";u=await upload(f)}
     if(!u&&!c){st.textContent="اكتب نصاً أو أرفق صورة أو فيديو";return}
-    if(u&&!/^https:\/\//.test(u)){st.textContent="الرابط يجب أن يبدأ بـ https";return}
+    if(u&&!/^https:\/\//i.test(u)){st.textContent="الرابط يجب أن يبدأ بـ https";return}
+    if(u&&!f&&!/\.(jpe?g|png|gif|webp|avif|bmp|mp4|m4v|mov|webm|ogv|m3u8)(?:[?#]|$)/i.test(u)){
+      st.textContent="هذا لا يبدو رابط ملف صورة أو فيديو مباشر. انسخ رابط الملف نفسه (مثل .mp4 أو .jpg)، وليس رابط صفحة مشاهدة مثل YouTube أو TikTok.";return;
+    }
     const tags=[["t",TAG],["client","kalimat"],...tagsForMentions(c),...(c.match(/#[\p{L}\p{N}_]+/gu)||[]).map(x=>["t",x.slice(1).toLowerCase()])];
     let t={kind:1,created_at:now(),content:c,tags};
     if(u){const m=f?((f.type&&f.type!="application/octet-stream")?f.type:mime(f.name)):mime(u);t={kind:/^image/.test(m)?20:22,created_at:now(),content:c,tags:[["title",c.slice(0,60)],["imeta","url "+u,"m "+m],["alt",c||"media"],...tags]}}
     const ev=await sign(t);publish(ev);addCard(ev);
-    st.textContent="تم إرسال المنشور إلى المرحّلات؛ قد يستغرق ظهوره لحظات";$("#dPost").close();$("#f").value="";$("#u").value="";$("#c").value="";$("#postPreview").replaceChildren();$("#postPreview").hidden=true;
+    st.textContent="تم إرسال المنشور إلى المرحّلات؛ قد يستغرق ظهوره لحظات";$("#dPost").close();$("#f").value="";selectedMediaBytes=null;selectedMediaFile=null;selectedMediaError="";$("#u").value="";$("#c").value="";$("#postPreview").replaceChildren();$("#postPreview").hidden=true;
   }catch(e){st.textContent="تعذّر النشر: "+(e&&e.message||e)}
 };
 
