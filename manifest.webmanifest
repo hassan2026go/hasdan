@@ -1,16 +1,14 @@
 {
-  "id": "/hasdan/",
-  "name": "كلمات - Kalimat",
-  "short_name": "كلمات",
-  "description": "منصة كلمات للتواصل ومشاركة المنشورات والفيديوهات",
-  "lang": "ar",
-  "dir": "rtl",
-  "start_url": "/hasdan/",
-  "scope": "/hasdan/",
+  "id": "./",
+  "name": "kalimat",
+  "short_name": "kalimat",
+  "description": "kalimat — منصة لامركزية للكلمة والصورة والفيديو",
+  "start_url": "./",
+  "scope": "./",
   "display": "standalone",
-  "orientation": "portrait-primary",
-  "background_color": "#020912",
-  "theme_color": "#020912",
+  "orientation": "portrait",
+  "background_color": "#020812",
+  "theme_color": "#000000",
   "icons": [
     {
       "src": "./icon-192.png",
@@ -23,12 +21,6 @@
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any"
-    },
-    {
-      "src": "./icon-512.png",
-      "sizes": "512x512",
-      "type": "image/png",
-      "purpose": "maskable"
     }
   ]
 }
