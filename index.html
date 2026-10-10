@@ -500,16 +500,6 @@ function applyTab(){
     const mb=c.querySelector(".mb");if(mb)mb.style.display="";
   });
 }
-function openCom(ev){
-  const L=$("#cl");L.replaceChildren();$("#dCom").showModal();
-  const got=new Set(),add=t=>L.append(el("p",{className:"cm",textContent:t}));
-  sub("cm",[{kinds:[1],"#e":[ev.id],"#t":[TAG],limit:50}],e=>{if(!got.has(e.id)){got.add(e.id);add(e.content)}});
-  $("#cs").onclick=async()=>{
-    if(!ok())return;const c=$("#ci").value.trim();if(!c)return;
-    try{const r=await sign({kind:1,created_at:now(),content:c,tags:[["e",ev.id,"","root"],["p",ev.pubkey],["t",TAG]]});publish(r);got.add(r.id);bump(ev.id,"c",r.id);add(c);$("#ci").value=""}catch{}
-  };
-}
-
 const SAVED_POSTS_KEY="kalimat_saved_posts_v1";
 function loadSavedPosts(){
   try{return new Set(JSON.parse(localStorage.getItem(SAVED_POSTS_KEY)||"[]"))}catch{return new Set()}
@@ -1043,7 +1033,7 @@ function tagsForMentions(text, exclude=[]){
   return tags;
 }
 function highlightMentions(node,text){
-  const parts=text.split(/(@[\\p{L}\\p{N}_.-]+)/gu);
+  const parts=text.split(/(@[\p{L}\p{N}_.-]+)/gu);
   parts.forEach(part=>{
     if(part.startsWith("@"))node.append(el("span",{className:"mention",textContent:part}));
     else node.append(document.createTextNode(part));
@@ -1107,26 +1097,33 @@ function openCom(ev){
     if(!all.length)L.append(el("p",{className:"mt",textContent:"لا تعليقات بعد. كن أول من يعلّق!"}));
     roots.forEach(c=>walk(c));
   }
-  render();$("#dCom").showModal();
-  sub("cm",[
-    {kinds:[1],"#e":[ev.id],"#t":[TAG],limit:200},
-    {kinds:[7],"#e":[ev.id],"#t":[TAG],limit:500}
-  ],e=>{
-    if(e.kind===1){
-      if(e.tags.some(t=>t[0]==="e"&&t[1]===ev.id)){cms.set(e.id,e);wantProfile(e.pubkey)}
-    }else{
-      // Only count a positive like directed at a comment; ignore other reaction types.
-      const isLike = e.content === "+" || e.content === "";
-      const refs = e.tags.filter(t=>t[0]==="e").map(t=>t[1]);
-      const target = refs.find(id=>id!==ev.id && cms.has(id));
-      if(isLike && target){
+  let likesTimer;
+  function refreshCommentLikes(){
+    clearTimeout(likesTimer);
+    likesTimer=setTimeout(()=>{
+      const ids=[ev.id,...cms.keys()];
+      sub("cmLikes",[{kinds:[7],"#e":ids,"#t":[TAG],limit:1000}],e=>{
+        // Only count positive reactions that point to one of the comments.
+        if(e.content!=="+" && e.content!=="")return;
+        const refs=e.tags.filter(t=>t[0]==="e").map(t=>t[1]);
+        const target=refs.find(id=>id!==ev.id&&cms.has(id));
+        if(!target)return;
         const s=lk.get(target)||new Set();
-        s.add(e.pubkey); // Set prevents duplicate likes from the same user.
+        s.add(e.pubkey);
         lk.set(target,s);
-      }
+        clearTimeout(tm);tm=setTimeout(render,180);
+      });
+    },250);
+  }
+  render();$("#dCom").showModal();
+  sub("cm",[{kinds:[1],"#e":[ev.id],"#t":[TAG],limit:200}],e=>{
+    if(e.kind===1&&e.tags.some(t=>t[0]==="e"&&t[1]===ev.id)){
+      if(!cms.has(e.id)){cms.set(e.id,e);wantProfile(e.pubkey);refreshCommentLikes()}
+      else cms.set(e.id,e);
+      clearTimeout(tm);tm=setTimeout(render,180);
     }
-    clearTimeout(tm);tm=setTimeout(render,180);
   });
+  refreshCommentLikes();
   setTimeout(render,1800);
   $("#cs").onclick=async()=>{
     if(!ok())return;
