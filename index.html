@@ -2,7 +2,7 @@
 <html lang="ar" dir="rtl">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <meta name="theme-color" content="#000000">
 <title>kalimat</title>
 <meta name="application-name" content="kalimat">
@@ -409,6 +409,8 @@ html:has(video:fullscreen) #feed,html:has(.card:fullscreen) #feed{scroll-snap-ty
 .ph .install-pill[hidden]{display:none}
 @keyframes instPulse{50%{box-shadow:0 0 22px #ff1744,0 0 44px #ff174488}}
 @media(prefers-reduced-motion:reduce){.ph .install-pill{animation:none}}
+
+html,body,#feed,.pg,dialog{touch-action:pan-x pan-y;-webkit-text-size-adjust:100%;text-size-adjust:100%}
 </style>
 </head>
 <body>
@@ -1410,7 +1412,7 @@ async function installKalimatApp(){
     kalimatInstallPrompt=null;
     return;
   }
-  alert("لتثبيت kalimat كتطبيق حقيقي: من قائمة Chrome ⋮ اختر «تثبيت التطبيق» (وليس «إضافة اختصار»). وعلى iPhone: زر المشاركة ثم «إضافة إلى الشاشة الرئيسية». سيختفي هذا الزر بعد التثبيت.");
+  diagnoseInstall();
 }
 window.addEventListener("beforeinstallprompt",event=>{
   event.preventDefault();
@@ -1425,11 +1427,38 @@ window.addEventListener("appinstalled",()=>{
 window.addEventListener("pageshow",refreshInstallEntry);
 refreshInstallEntry();
 
+async function diagnoseInstall(){
+  const rows=[],add=(ok,t,h)=>rows.push([ok,t,h]);
+  const get=async u=>{try{return await fetch(u,{cache:"no-store"})}catch{return null}};
+  add(location.protocol==="https:","الموقع يعمل عبر https","افتح الموقع من رابط https وليس من ملف على الهاتف");
+  let man=null;const mr=await get("manifest.webmanifest");
+  if(mr&&mr.ok){try{man=await mr.json()}catch{}}
+  add(!!man,"ملف manifest.webmanifest","غير موجود أو غير صالح: ارفعه إلى المجلد الرئيسي بجانب index.html");
+  for(const ic of (man&&man.icons)||[{src:"icon-192.png"},{src:"icon-512.png"}]){
+    const r=await get(ic.src);
+    add(!!(r&&r.ok&&(r.headers.get("content-type")||"").startsWith("image")),"الأيقونة "+ic.src,"غير موجودة: ارفع "+ic.src+" إلى المجلد الرئيسي بنفس الاسم");
+  }
+  const sr=await get("sw.js");add(!!(sr&&sr.ok),"ملف sw.js","غير موجود: ارفعه إلى المجلد الرئيسي");
+  let reg=null,err="";
+  try{reg=await navigator.serviceWorker.register("sw.js")}catch(e){err=(e&&e.message)||"تعذّر التسجيل"}
+  add(!!reg,"تسجيل خدمة العمل",err);
+  const ready=!!kalimatInstallPrompt;
+  const bad=rows.filter(r=>!r[0]);
+  let d=document.getElementById("dInst");
+  if(!d){d=el("dialog",{id:"dInst"});document.body.append(d)}
+  d.replaceChildren(el("h2",{textContent:"فحص تثبيت التطبيق"}),
+    ...rows.map(([ok,t,h])=>el("div",{className:"cm"},el("div",{className:"cb"},el("p",{textContent:(ok?"✅ ":"❌ ")+t}),...(ok?[]:[el("small",{className:"dt",textContent:h})])))),
+    el("p",{className:"w",textContent:bad.length?"أصلح البنود ❌ ثم أعد المحاولة.":ready?"كل شيء سليم. أغلق هذه النافذة واضغط زر التثبيت.":"الملفات سليمة لكن Chrome لم يعرض نافذة التثبيت بعد. أعد تحميل الصفحة وانتظر ثوانٍ ثم اضغط الزر، أو افتح ⋮ واختر «تثبيت التطبيق». وإن لم يظهر فاحذف أي اختصار أو تطبيق kalimat قديم من الشاشة وامسح بيانات الموقع من إعدادات Chrome ثم أعد المحاولة."}),
+    el("button",{className:"b g",textContent:"إغلاق",onclick:()=>d.close()}));
+  d.showModal();
+}
 function makeInstallBtn(){
   const b=el("button",{type:"button",id:"installAccountEntry",className:"install-pill",textContent:"⬇ تثبيت التطبيق",ariaLabel:"تثبيت تطبيق kalimat"});
   b.onclick=()=>installKalimatApp();b.hidden=isKalimatInstalled();return b;
 }
 if("serviceWorker" in navigator&&/^https?:$/.test(location.protocol))window.addEventListener("load",()=>navigator.serviceWorker.register("sw.js").catch(()=>{}));
+document.addEventListener("gesturestart",e=>e.preventDefault());
+document.addEventListener("touchmove",e=>{if(e.touches&&e.touches.length>1)e.preventDefault()},{passive:false});
 RELAYS.forEach(open1);
 sub("feed",[{kinds:[1,6,16,20,21,22],"#t":[TAG],limit:100}],addCard);
 try{const s=localStorage.getItem("nsec");if(s){const d=NT.nip19.decode(s);if(d.type=="nsec")setKey(d.data)}}catch{}
